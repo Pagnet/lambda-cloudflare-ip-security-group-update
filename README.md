@@ -1,6 +1,6 @@
 # lambda-cloudflare-ip-security-group-update
 
-Using a Lambda function to automate creating and updating a Security Group of Cloudflares IPv4 addresses.
+Using a Lambda function to automate creating and updating a Security Group of Cloudflares IPv4 and IPv6 addresses.
 
 ## Configure triggers using CloudWatch Events
 
@@ -17,7 +17,7 @@ Using a Lambda function to automate creating and updating a Security Group of Cl
 **value:** 80,443
 
 **key:** SECURITY_GROUP_ID
-**value:** add your security group id here
+**value:** add your security group ids here
 
 If required you can create a custom security group using the below command line:
 
@@ -31,7 +31,7 @@ Required rule to allow the lambda function to edit the security group, use the c
 
 ## Time out
 
-Set the Timeout to 8 seconds
+Set the Timeout to 30 seconds
 
 ## Room for improvement
 

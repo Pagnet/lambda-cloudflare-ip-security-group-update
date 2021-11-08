@@ -12,8 +12,8 @@ def get_cloudflare_ip_list():
     """
     response = requests.get('https://api.cloudflare.com/client/v4/ips')
     ips = response.json()
-    if 'result' in ips and 'ipv4_cidrs' in ips['result']:
-        return ips['result']['ipv4_cidrs']
+    if 'result' in ips and 'ipv4_cidrs' or 'ipv6_cidrs' in ips['result']:
+        return (ips['result']['ipv4_cidrs'], ips['result']['ipv6_cidrs'])
 
     raise ConnectionError("Error loading IPs from CloudFlare")
 
@@ -49,6 +49,21 @@ def check_rule_exists(rules, address, port):
                 return True
     return False
 
+def check_rule_exists_ipv6(rules, address, port):
+    """
+    Check if the rule currently exists
+
+    :param rules:
+    :param address:
+    :param port:
+    :return:
+    """
+    for rule in rules:
+        for ip_range in rule['Ipv6Ranges']:
+            if ip_range['CidrIpv6'] == address and rule['FromPort'] == port:
+                return True
+    return False
+
 
 def add_rule(group, address, port, description):
     """
@@ -74,7 +89,33 @@ def add_rule(group, address, port, description):
         }
     ]
     group.authorize_ingress(IpPermissions=permissions)
-    print("Added %s : %i  " % (address, port))
+    print("Added %s : %i to %s " % (address, port, group.group_id))
+
+def add_rule_ipv6(group, address, port, description):
+    """
+    Add the IP address and port to the security group
+
+    :param group:
+    :param address:
+    :param port:
+    :param description:
+    :return:
+    """
+    permissions = [
+        {
+            'IpProtocol': 'tcp',
+            'FromPort': port,
+            'ToPort': port,
+            'Ipv6Ranges': [
+                {
+                    'CidrIpv6': address,
+                    'Description': description,
+                }
+            ],
+        }
+    ]
+    group.authorize_ingress(IpPermissions=permissions)
+    print("Added %s : %i to %s " % (address, port, group.group_id))
 
 
 def lambda_handler(event, context):
@@ -89,12 +130,18 @@ def lambda_handler(event, context):
     if not ports:
         ports = [80]
 
-    security_group = get_aws_security_group(os.environ['SECURITY_GROUP_ID'])
-    current_rules = security_group.ip_permissions
+    security_groups = [str(security_group) for security_group in os.environ['SECURITY_GROUP_ID'].split(",")]
+
     ip_addresses = get_cloudflare_ip_list()
     description = "Authorize CloudFlare access"
 
-    for ip_address in ip_addresses:
+    for security_group in security_groups:
+        security_group = get_aws_security_group(security_group)
+        current_rules = security_group.ip_permissions
         for port in ports:
-            if not check_rule_exists(current_rules, ip_address, port):
-                add_rule(security_group, ip_address, port, description)
+            for ip_address in ip_addresses[0]:
+                if not check_rule_exists(current_rules, ip_address, port):
+                    add_rule(security_group, ip_address, port, description)
+            for ip_address in ip_addresses[1]:
+                if not check_rule_exists_ipv6(current_rules, ip_address, port):
+                    add_rule_ipv6(security_group, ip_address, port, description)
